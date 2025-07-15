@@ -4,8 +4,8 @@ https://www.strategixagents.com/
 
 # 🚀 GoHighLevel MCP Server
 
-## 🚨 **IMPORTANT: FOUNDATIONAL PROJECT NOTICE** 
-
+## 🚨 **IMPORTANT: FOUNDATIONAL PROJECT NOTICE ** 
+ 
 > **⚠️ This is a BASE-LEVEL foundational project designed to connect the GoHighLevel community with AI automation through MCP (Model Context Protocol).**
 
 ### **🎯 What This Project Is:**
