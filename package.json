@@ -9,7 +9,8 @@
   "files": [
     "dist/",
     "README.md",
-    "package.json"
+    "package.json",
+    "api/"
   ],
   "engines": {
     "node": ">=18.0.0"
@@ -20,6 +21,7 @@
     "start": "node dist/http-server.js",
     "start:stdio": "node dist/server.js",
     "start:http": "node dist/http-server.js",
+    "start:session": "node api/mcp-session.js",
     "vercel-build": "npm run build",
     "prepublishOnly": "npm run build",
     "test": "jest",
@@ -31,7 +33,9 @@
     "mcp",
     "gohighlevel",
     "chatgpt",
-    "api"
+    "api",
+    "session",
+    "multi-tenant"
   ],
   "author": "",
   "license": "ISC",
