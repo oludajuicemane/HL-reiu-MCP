@@ -1,28 +1,40 @@
-// Create this file: api/index.js
-// This replaces your current MCP server with the correct API calls
-
+// api/index.js - Dynamic credentials version
 const axios = require('axios');
 
-// GoHighLevel API configuration
-const GHL_CONFIG = {
-  apiKey: 'pit-aaca741e-47a2-4b1e-b793-820d2621667b',
+// Session storage for user credentials
+let userSession = {
+  apiKey: null,
+  locationId: null,
+  authenticated: false,
+  ghlApi: null
+};
+
+// Base configuration
+const GHL_BASE_CONFIG = {
   baseUrl: 'https://services.leadconnectorhq.com',
-  locationId: '9hxHySEz2LSjRxkhuGQs',
   version: '2021-07-28'
 };
 
-// Create axios instance with correct headers
-const ghlApi = axios.create({
-  baseURL: GHL_CONFIG.baseUrl,
-  headers: {
-    'Authorization': `Bearer ${GHL_CONFIG.apiKey}`,
-    'Version': GHL_CONFIG.version,
-    'Content-Type': 'application/json'
-  }
-});
-
-// MCP Server Tools
+// MCP Server Tools - Updated with authenticate tool
 const TOOLS = [
+  {
+    name: 'authenticate',
+    description: 'Set your REI Unlock API credentials for this session',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        apiKey: { 
+          type: 'string', 
+          description: 'Private Integrations API Key (starts with pit-)' 
+        },
+        locationId: { 
+          type: 'string', 
+          description: 'Location ID from REI Unlock Settings' 
+        }
+      },
+      required: ['apiKey', 'locationId']
+    }
+  },
   {
     name: 'search_contacts',
     description: 'Search for contacts by phone number, email, or name',
@@ -64,26 +76,128 @@ const TOOLS = [
   }
 ];
 
-// Tool execution functions
-async function searchContacts(args) {
+// Authenticate function - stores user credentials
+async function authenticate(args) {
   try {
-    const params = {
-      locationId: GHL_CONFIG.locationId
+    console.log('Setting up authentication with user credentials...');
+    
+    // Validate API key format
+    if (!args.apiKey.startsWith('pit-')) {
+      return {
+        success: false,
+        error: 'Invalid API key format. Private Integrations API key must start with "pit-"'
+      };
+    }
+    
+    // Create API client with user's credentials
+    const ghlApi = axios.create({
+      baseURL: GHL_BASE_CONFIG.baseUrl,
+      headers: {
+        'Authorization': `Bearer ${args.apiKey}`,
+        'Version': GHL_BASE_CONFIG.version,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    // Test the connection
+    const response = await ghlApi.get(`/locations/${args.locationId}`);
+    
+    // Store in session
+    userSession = {
+      apiKey: args.apiKey,
+      locationId: args.locationId,
+      authenticated: true,
+      ghlApi: ghlApi
     };
     
+    console.log('✅ Authentication successful!');
+    
+    return {
+      success: true,
+      authenticated: true,
+      message: `✅ Connected to REI Unlock successfully!`,
+      location: {
+        id: args.locationId,
+        name: response.data.name || 'Connected Location'
+      }
+    };
+    
+  } catch (error) {
+    console.error('❌ Authentication failed:', error.response?.data || error.message);
+    
+    // Clear session on failure
+    userSession = {
+      apiKey: null,
+      locationId: null,
+      authenticated: false,
+      ghlApi: null
+    };
+    
+    return {
+      success: false,
+      authenticated: false,
+      error: 'Authentication failed: ' + (error.response?.data?.message || error.message),
+      details: error.response?.data
+    };
+  }
+}
+
+// Check if authenticated
+function requireAuth() {
+  if (!userSession.authenticated || !userSession.ghlApi) {
+    throw new Error('Not authenticated. Please call authenticate first with your API key and Location ID.');
+  }
+  return userSession.ghlApi;
+}
+
+// Search contacts function
+async function searchContacts(args) {
+  try {
+    const ghlApi = requireAuth(); // This will throw if not authenticated
+    
+    const params = {
+      locationId: userSession.locationId
+    };
+    
+    // Build search query
     if (args.phone) params.query = args.phone;
     else if (args.email) params.query = args.email;
     else if (args.query) params.query = args.query;
     
+    console.log('🔍 Searching contacts with params:', params);
     const response = await ghlApi.get('/contacts/', { params });
     
-    return {
-      success: true,
-      data: response.data,
-      message: `Found ${response.data.contacts.length} contact(s)`,
-      searchQuery: params.query
-    };
+    const contacts = response.data.contacts || [];
+    
+    if (contacts.length > 0) {
+      const contact = contacts[0];
+      const fullName = contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+      
+      return {
+        success: true,
+        found: true,
+        contact: {
+          id: contact.id,
+          name: fullName,
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          phone: contact.phone,
+          email: contact.email
+        },
+        message: `📞 Found: ${fullName}`,
+        totalResults: contacts.length
+      };
+    } else {
+      return {
+        success: true,
+        found: false,
+        message: `❌ No contacts found for: ${params.query}`,
+        searchQuery: params.query
+      };
+    }
+    
   } catch (error) {
+    console.error('❌ Search error:', error.message);
     return {
       success: false,
       error: error.message,
@@ -92,24 +206,30 @@ async function searchContacts(args) {
   }
 }
 
+// Create contact function
 async function createContact(args) {
   try {
+    const ghlApi = requireAuth();
+    
     const contactData = {
-      locationId: GHL_CONFIG.locationId,
+      locationId: userSession.locationId,
       firstName: args.firstName,
       lastName: args.lastName,
       email: args.email,
       phone: args.phone
     };
     
+    console.log('👤 Creating contact:', contactData);
     const response = await ghlApi.post('/contacts/', contactData);
     
     return {
       success: true,
-      data: response.data,
-      message: `Contact created successfully: ${args.firstName} ${args.lastName}`
+      contact: response.data.contact,
+      message: `✅ Created: ${args.firstName} ${args.lastName || ''}`
     };
+    
   } catch (error) {
+    console.error('❌ Create contact error:', error.message);
     return {
       success: false,
       error: error.message,
@@ -118,22 +238,33 @@ async function createContact(args) {
   }
 }
 
+// Send SMS function
 async function sendSMS(args) {
   try {
+    const ghlApi = requireAuth();
+    
     let contactId = args.contactId;
     
-    // If no contact ID, try to find contact by phone
+    // If no contact ID provided, search by phone
     if (!contactId && args.phone) {
+      console.log('📱 Looking up contact by phone:', args.phone);
       const searchResult = await searchContacts({ phone: args.phone });
-      if (searchResult.success && searchResult.data.contacts.length > 0) {
-        contactId = searchResult.data.contacts[0].id;
+      
+      if (searchResult.success && searchResult.found) {
+        contactId = searchResult.contact.id;
+        console.log('✅ Found contact ID:', contactId);
+      } else {
+        return {
+          success: false,
+          error: `Contact not found with phone: ${args.phone}`
+        };
       }
     }
     
     if (!contactId) {
       return {
         success: false,
-        error: 'No contact found. Please provide contactId or phone number of existing contact.'
+        error: 'No contact ID provided and no phone number to search with'
       };
     }
     
@@ -143,14 +274,17 @@ async function sendSMS(args) {
       message: args.message
     };
     
+    console.log('📨 Sending SMS:', messageData);
     const response = await ghlApi.post('/conversations/messages', messageData);
     
     return {
       success: true,
-      data: response.data,
-      message: `SMS sent successfully to contact ${contactId}`
+      messageId: response.data.messageId,
+      message: `📱 SMS sent to contact ${contactId}!`
     };
+    
   } catch (error) {
+    console.error('❌ SMS error:', error.message);
     return {
       success: false,
       error: error.message,
@@ -159,8 +293,36 @@ async function sendSMS(args) {
   }
 }
 
+// Helper function to parse request body
+async function parseBody(req) {
+  return new Promise((resolve) => {
+    if (req.body) {
+      resolve(req.body);
+      return;
+    }
+    
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    
+    req.on('end', () => {
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        resolve(parsed);
+      } catch (e) {
+        console.error('Body parse error:', e.message);
+        resolve({});
+      }
+    });
+  });
+}
+
 // Main handler
 module.exports = async (req, res) => {
+  const startTime = Date.now();
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -174,18 +336,25 @@ module.exports = async (req, res) => {
   const { method, url } = req;
   
   try {
+    // Parse body for POST requests
+    if (method === 'POST') {
+      req.body = await parseBody(req);
+      console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
+    }
+    
     // Health check
     if (method === 'GET' && url === '/health') {
       res.json({
         status: 'healthy',
-        server: 'ghl-mcp-server',
-        version: '1.0.0',
+        server: 'rei-unlock-mcp',
+        version: '2.0.0',
         timestamp: new Date().toISOString(),
-        api: {
-          connected: true,
-          endpoint: GHL_CONFIG.baseUrl,
-          locationId: GHL_CONFIG.locationId
-        }
+        session: {
+          authenticated: userSession.authenticated,
+          hasApiKey: !!userSession.apiKey,
+          hasLocationId: !!userSession.locationId
+        },
+        tools: TOOLS.length
       });
       return;
     }
@@ -194,7 +363,8 @@ module.exports = async (req, res) => {
     if (method === 'GET' && url === '/tools') {
       res.json({
         tools: TOOLS,
-        count: TOOLS.length
+        count: TOOLS.length,
+        authenticated: userSession.authenticated
       });
       return;
     }
@@ -208,16 +378,20 @@ module.exports = async (req, res) => {
         'Access-Control-Allow-Origin': '*'
       });
       
-      res.write('data: {"type":"connection","status":"connected","tools":3}\n\n');
+      res.write(`data: {"type":"connection","status":"connected","authenticated":${userSession.authenticated}}\n\n`);
       
       // Keep alive
       const keepAlive = setInterval(() => {
         res.write('data: {"type":"ping"}\n\n');
       }, 30000);
       
-      req.on('close', () => {
+      // Auto-close
+      setTimeout(() => {
         clearInterval(keepAlive);
-      });
+        res.end();
+      }, 55000);
+      
+      req.on('close', () => clearInterval(keepAlive));
       return;
     }
     
@@ -225,36 +399,63 @@ module.exports = async (req, res) => {
     if (url === '/sse' && method === 'POST') {
       const { jsonrpc, method: rpcMethod, params, id } = req.body;
       
-      if (rpcMethod === 'tools/list') {
-        res.json({
+      console.log('🔧 MCP Call:', rpcMethod, params?.name);
+      
+      // Handle MCP protocol methods
+      if (rpcMethod === 'initialize') {
+        const response = {
           jsonrpc: '2.0',
           id: id,
           result: {
-            tools: TOOLS
+            protocolVersion: '2024-11-05',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'rei-unlock-mcp', version: '2.0.0' }
           }
-        });
+        };
+        res.json(response);
+        return;
+      }
+      
+      if (rpcMethod === 'tools/list') {
+        const response = {
+          jsonrpc: '2.0',
+          id: id,
+          result: { tools: TOOLS }
+        };
+        res.json(response);
         return;
       }
       
       if (rpcMethod === 'tools/call') {
         const { name, arguments: args } = params;
+        console.log(`🛠️ Executing: ${name}`, args);
+        
         let result;
         
-        switch (name) {
-          case 'search_contacts':
-            result = await searchContacts(args);
-            break;
-          case 'create_contact':
-            result = await createContact(args);
-            break;
-          case 'send_sms':
-            result = await sendSMS(args);
-            break;
-          default:
-            result = { success: false, error: `Unknown tool: ${name}` };
+        try {
+          switch (name) {
+            case 'authenticate':
+              result = await authenticate(args);
+              break;
+            case 'search_contacts':
+              result = await searchContacts(args);
+              break;
+            case 'create_contact':
+              result = await createContact(args);
+              break;
+            case 'send_sms':
+              result = await sendSMS(args);
+              break;
+            default:
+              result = { success: false, error: `Unknown tool: ${name}` };
+          }
+        } catch (error) {
+          result = { success: false, error: error.message };
         }
         
-        res.json({
+        console.log(`✅ Result:`, result);
+        
+        const response = {
           jsonrpc: '2.0',
           id: id,
           result: {
@@ -265,27 +466,41 @@ module.exports = async (req, res) => {
               }
             ]
           }
-        });
+        };
+        
+        res.json(response);
         return;
       }
+      
+      // Default MCP response
+      const response = {
+        jsonrpc: '2.0',
+        id: id,
+        result: { status: 'ok' }
+      };
+      res.json(response);
+      return;
     }
     
     // Default response
     res.json({
-      message: 'GoHighLevel MCP Server',
+      message: 'REI Unlock MCP Server',
+      status: 'running',
+      authenticated: userSession.authenticated,
       endpoints: {
         health: '/health',
         tools: '/tools',
-        sse: '/sse (GET for connection, POST for tool calls)'
+        sse: '/sse'
       },
-      tools: TOOLS.map(t => t.name)
+      availableTools: TOOLS.map(t => t.name),
+      processing_time: `${Date.now() - startTime}ms`
     });
     
   } catch (error) {
-    console.error('Server error:', error);
+    console.error('❌ Server error:', error);
     res.status(500).json({
       error: error.message,
-      stack: error.stack
+      timestamp: new Date().toISOString()
     });
   }
 };
