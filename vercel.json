@@ -2,22 +2,11 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/mcp-session.js",
+      "src": "api/**/*.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
-    {
-      "src": "/api/index",
-      "dest": "/api/index.js"
-    },
-    {
-      "src": "/api/mcp-session",
-      "dest": "/api/mcp-session.js"
-    }
+    { "src": "/(.*)", "dest": "/api/index.js" }
   ]
-}
+} 
