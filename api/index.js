@@ -20,25 +20,6 @@ module.exports = async (req, res) => {
   return server.handleRequest(req, res);
 };
 
-// STEP 2: Update your vercel.json configuration
-// vercel.json should be:
-{
-  "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    { "src": "/(.*)", "dest": "/api/index.js" }
-  ],
-  "functions": {
-    "api/index.js": {
-      "includeFiles": "dist/**"
-    }
-  }
-}
 
 // STEP 3: Update your package.json scripts
 {
@@ -105,29 +86,3 @@ module.exports = async (req, res) => {
     });
   }
 };
-
-// Then test with: curl https://rei-unlock-mcp.vercel.app/api/test
-
-// STEP 7: Debug current deployment
-// Check what's actually deployed:
-console.log("Current deployment issues:");
-console.log("1. Wrong server code is deployed");
-console.log("2. Mock responses instead of real API calls");
-console.log("3. Different tool structure than expected");
-console.log("");
-console.log("To fix:");
-console.log("1. Verify your build process compiles the right files");
-console.log("2. Check that dist/http-server.js is the correct file");
-console.log("3. Ensure Vercel is pointing to the right entry point");
-console.log("4. Test environment variables are accessible");
-console.log("");
-console.log("Expected tools in your real server:");
-console.log("- create_contact, search_contacts, get_contact, update_contact");
-console.log("- send_sms, send_email, search_conversations");
-console.log("- create_blog_post, get_blog_posts");
-console.log("- Plus 250+ other tools");
-console.log("");
-console.log("Current deployed server has:");
-console.log("- search, send_message, search_contacts (different structure)");
-console.log("- Mock responses with John Doe, Jane Smith");
-console.log("- No real API integration");
