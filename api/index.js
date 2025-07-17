@@ -14,3 +14,9 @@ module.exports = async (req, res) => {
     });
   }
 };
+module.exports = async (req, res) => {
+  res.status(200).json({
+    message: "✅ Deployed update from GitHub.",
+    timestamp: new Date().toISOString()
+  });
+};
