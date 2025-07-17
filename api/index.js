@@ -1,6 +1,4 @@
-// Create this file: api/index.js
-// This replaces your current MCP server with the correct API calls
-
+// api/index.js - Your original code with body parsing fix
 const axios = require('axios');
 
 // GoHighLevel API configuration
@@ -75,15 +73,17 @@ async function searchContacts(args) {
     else if (args.email) params.query = args.email;
     else if (args.query) params.query = args.query;
     
+    console.log('Searching contacts with params:', params);
     const response = await ghlApi.get('/contacts/', { params });
     
     return {
       success: true,
       data: response.data,
-      message: `Found ${response.data.contacts.length} contact(s)`,
+      message: `Found ${response.data.contacts?.length || 0} contact(s)`,
       searchQuery: params.query
     };
   } catch (error) {
+    console.error('Search contacts error:', error.response?.data || error.message);
     return {
       success: false,
       error: error.message,
@@ -102,14 +102,16 @@ async function createContact(args) {
       phone: args.phone
     };
     
+    console.log('Creating contact with data:', contactData);
     const response = await ghlApi.post('/contacts/', contactData);
     
     return {
       success: true,
       data: response.data,
-      message: `Contact created successfully: ${args.firstName} ${args.lastName}`
+      message: `Contact created successfully: ${args.firstName} ${args.lastName || ''}`
     };
   } catch (error) {
+    console.error('Create contact error:', error.response?.data || error.message);
     return {
       success: false,
       error: error.message,
@@ -124,9 +126,11 @@ async function sendSMS(args) {
     
     // If no contact ID, try to find contact by phone
     if (!contactId && args.phone) {
+      console.log('Looking up contact by phone:', args.phone);
       const searchResult = await searchContacts({ phone: args.phone });
-      if (searchResult.success && searchResult.data.contacts.length > 0) {
+      if (searchResult.success && searchResult.data.contacts?.length > 0) {
         contactId = searchResult.data.contacts[0].id;
+        console.log('Found contact ID:', contactId);
       }
     }
     
@@ -143,6 +147,7 @@ async function sendSMS(args) {
       message: args.message
     };
     
+    console.log('Sending SMS with data:', messageData);
     const response = await ghlApi.post('/conversations/messages', messageData);
     
     return {
@@ -151,6 +156,7 @@ async function sendSMS(args) {
       message: `SMS sent successfully to contact ${contactId}`
     };
   } catch (error) {
+    console.error('Send SMS error:', error.response?.data || error.message);
     return {
       success: false,
       error: error.message,
@@ -159,8 +165,36 @@ async function sendSMS(args) {
   }
 }
 
+// Helper function to parse request body
+async function parseBody(req) {
+  return new Promise((resolve) => {
+    if (req.body) {
+      resolve(req.body);
+      return;
+    }
+    
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    
+    req.on('end', () => {
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        resolve(parsed);
+      } catch (e) {
+        console.error('Body parse error:', e.message, 'Body:', body);
+        resolve({});
+      }
+    });
+  });
+}
+
 // Main handler
 module.exports = async (req, res) => {
+  const startTime = Date.now();
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -174,18 +208,25 @@ module.exports = async (req, res) => {
   const { method, url } = req;
   
   try {
+    // Parse body for POST requests
+    if (method === 'POST') {
+      req.body = await parseBody(req);
+      console.log('Parsed body:', req.body);
+    }
+    
     // Health check
     if (method === 'GET' && url === '/health') {
       res.json({
         status: 'healthy',
-        server: 'ghl-mcp-server',
+        server: 'rei-unlock-mcp',
         version: '1.0.0',
         timestamp: new Date().toISOString(),
         api: {
           connected: true,
           endpoint: GHL_CONFIG.baseUrl,
           locationId: GHL_CONFIG.locationId
-        }
+        },
+        tools: TOOLS.length
       });
       return;
     }
@@ -215,6 +256,12 @@ module.exports = async (req, res) => {
         res.write('data: {"type":"ping"}\n\n');
       }, 30000);
       
+      // Auto-close before Vercel timeout
+      setTimeout(() => {
+        clearInterval(keepAlive);
+        res.end();
+      }, 55000);
+      
       req.on('close', () => {
         clearInterval(keepAlive);
       });
@@ -225,19 +272,24 @@ module.exports = async (req, res) => {
     if (url === '/sse' && method === 'POST') {
       const { jsonrpc, method: rpcMethod, params, id } = req.body;
       
+      console.log('MCP call:', { jsonrpc, rpcMethod, params, id });
+      
       if (rpcMethod === 'tools/list') {
-        res.json({
+        const response = {
           jsonrpc: '2.0',
           id: id,
           result: {
             tools: TOOLS
           }
-        });
+        };
+        res.json(response);
         return;
       }
       
       if (rpcMethod === 'tools/call') {
         const { name, arguments: args } = params;
+        console.log(`Executing tool: ${name} with args:`, args);
+        
         let result;
         
         switch (name) {
@@ -254,7 +306,9 @@ module.exports = async (req, res) => {
             result = { success: false, error: `Unknown tool: ${name}` };
         }
         
-        res.json({
+        console.log(`Tool ${name} result:`, result);
+        
+        const response = {
           jsonrpc: '2.0',
           id: id,
           result: {
@@ -265,27 +319,41 @@ module.exports = async (req, res) => {
               }
             ]
           }
-        });
+        };
+        
+        res.json(response);
         return;
       }
+      
+      // Handle other MCP methods
+      const response = {
+        jsonrpc: '2.0',
+        id: id,
+        result: { status: 'ok' }
+      };
+      res.json(response);
+      return;
     }
     
     // Default response
     res.json({
-      message: 'GoHighLevel MCP Server',
+      message: 'REI Unlock MCP Server',
+      status: 'running',
       endpoints: {
         health: '/health',
         tools: '/tools',
         sse: '/sse (GET for connection, POST for tool calls)'
       },
-      tools: TOOLS.map(t => t.name)
+      tools: TOOLS.map(t => t.name),
+      processing_time: `${Date.now() - startTime}ms`
     });
     
   } catch (error) {
     console.error('Server error:', error);
     res.status(500).json({
       error: error.message,
-      stack: error.stack
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      timestamp: new Date().toISOString()
     });
   }
 };
