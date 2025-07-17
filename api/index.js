@@ -430,6 +430,18 @@ module.exports = async (req, res) => {
         const { name, arguments: args } = params;
         console.log(`🛠️ Executing: ${name}`, args);
         
+        // Detect if this is Custom Actions or MCP
+        const userAgent = req.headers['user-agent'] || '';
+        const referer = req.headers['referer'] || '';
+        const isCustomActions = userAgent.includes('GPTBot') || 
+                               userAgent.includes('ChatGPT') || 
+                               referer.includes('openai.com') ||
+                               referer.includes('chatgpt.com');
+        
+        console.log(`🔍 Client detection: ${isCustomActions ? 'ChatGPT Custom Actions' : 'MCP'}`);
+        console.log(`📱 User-Agent: ${userAgent}`);
+        console.log(`🔗 Referer: ${referer}`);
+        
         let result;
         
         try {
@@ -455,20 +467,27 @@ module.exports = async (req, res) => {
         
         console.log(`✅ Result:`, result);
         
-        const response = {
-          jsonrpc: '2.0',
-          id: id,
-          result: {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(result, null, 2)
-              }
-            ]
-          }
-        };
-        
-        res.json(response);
+        if (isCustomActions) {
+          // ChatGPT Custom Actions expects direct JSON response
+          console.log('📤 Sending Custom Actions response (direct JSON)');
+          res.json(result);
+        } else {
+          // MCP expects wrapped response
+          console.log('📤 Sending MCP response (wrapped JSON)');
+          const response = {
+            jsonrpc: '2.0',
+            id: id,
+            result: {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify(result, null, 2)
+                }
+              ]
+            }
+          };
+          res.json(response);
+        }
         return;
       }
       
