@@ -20,17 +20,6 @@ module.exports = async (req, res) => {
   return server.handleRequest(req, res);
 };
 
-
-// STEP 3: Update your package.json scripts
-{
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/http-server.js",
-    "dev": "ts-node src/http-server.ts",
-    "vercel-build": "npm run build"
-  }
-}
-
 // STEP 4: Check your current deployment
 // 1. Go to Vercel Dashboard
 // 2. Find your rei-unlock-mcp project
