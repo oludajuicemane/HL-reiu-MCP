@@ -1,525 +1,133 @@
-// api/index.js - Dynamic credentials version
+// STEP 1: Fix your api/index.js file for Vercel deployment
+// Create or update: api/index.js
+
+const { GHLMCPHttpServer } = require('../dist/http-server');
+
+let server;
+
+module.exports = async (req, res) => {
+  // Initialize server if not already done
+  if (!server) {
+    // Import the server class
+    const { GHLMCPHttpServer } = await import('../dist/http-server.js');
+    server = new GHLMCPHttpServer();
+    
+    // Override the start method to not call listen (Vercel handles this)
+    server.handleRequest = server.app;
+  }
+
+  // Handle the request
+  return server.handleRequest(req, res);
+};
+
+// STEP 2: Update your vercel.json configuration
+// vercel.json should be:
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/index.js" }
+  ],
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "dist/**"
+    }
+  }
+}
+
+// STEP 3: Update your package.json scripts
+{
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/http-server.js",
+    "dev": "ts-node src/http-server.ts",
+    "vercel-build": "npm run build"
+  }
+}
+
+// STEP 4: Check your current deployment
+// 1. Go to Vercel Dashboard
+// 2. Find your rei-unlock-mcp project
+// 3. Check the Build logs for errors
+// 4. Check Environment Variables are set:
+//    - GHL_API_KEY = pit-aaca741e-47a2-4b1e-b793-820d2621667b
+//    - GHL_LOCATION_ID = 9hxHySEz2LSjRxkhuGQs
+//    - GHL_BASE_URL = https://services.leadconnectorhq.com
+//    - NODE_ENV = production
+
+// STEP 5: Force redeploy with correct server
+// Run these commands in your project directory:
+
+// 1. Make sure TypeScript compiles correctly
+npm run build
+
+// 2. Test locally first
+node dist/http-server.js
+
+// 3. Deploy to Vercel
+vercel --prod
+
+// STEP 6: Alternative - Simple fix for immediate testing
+// If you just want to test the API connection quickly, create a simple test file:
+
+// api/test.js
 const axios = require('axios');
 
-// Session storage for user credentials
-let userSession = {
-  apiKey: null,
-  locationId: null,
-  authenticated: false,
-  ghlApi: null
-};
-
-// Base configuration
-const GHL_BASE_CONFIG = {
-  baseUrl: 'https://services.leadconnectorhq.com',
-  version: '2021-07-28'
-};
-
-// MCP Server Tools - Updated with authenticate tool
-const TOOLS = [
-  {
-    name: 'authenticate',
-    description: 'Set your REI Unlock API credentials for this session',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        apiKey: { 
-          type: 'string', 
-          description: 'Private Integrations API Key (starts with pit-)' 
-        },
-        locationId: { 
-          type: 'string', 
-          description: 'Location ID from REI Unlock Settings' 
-        }
-      },
-      required: ['apiKey', 'locationId']
-    }
-  },
-  {
-    name: 'search_contacts',
-    description: 'Search for contacts by phone number, email, or name',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        phone: { type: 'string', description: 'Phone number to search' },
-        email: { type: 'string', description: 'Email to search' },
-        query: { type: 'string', description: 'General search query' }
-      }
-    }
-  },
-  {
-    name: 'create_contact',
-    description: 'Create a new contact',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        firstName: { type: 'string', description: 'First name' },
-        lastName: { type: 'string', description: 'Last name' },
-        email: { type: 'string', description: 'Email address' },
-        phone: { type: 'string', description: 'Phone number' }
-      },
-      required: ['firstName', 'phone']
-    }
-  },
-  {
-    name: 'send_sms',
-    description: 'Send SMS message to a contact',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        contactId: { type: 'string', description: 'Contact ID' },
-        phone: { type: 'string', description: 'Phone number if no contact ID' },
-        message: { type: 'string', description: 'Message to send' }
-      },
-      required: ['message']
-    }
-  }
-];
-
-// Authenticate function - stores user credentials
-async function authenticate(args) {
-  try {
-    console.log('Setting up authentication with user credentials...');
-    
-    // Validate API key format
-    if (!args.apiKey.startsWith('pit-')) {
-      return {
-        success: false,
-        error: 'Invalid API key format. Private Integrations API key must start with "pit-"'
-      };
-    }
-    
-    // Create API client with user's credentials
-    const ghlApi = axios.create({
-      baseURL: GHL_BASE_CONFIG.baseUrl,
-      headers: {
-        'Authorization': `Bearer ${args.apiKey}`,
-        'Version': GHL_BASE_CONFIG.version,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    // Test the connection
-    const response = await ghlApi.get(`/locations/${args.locationId}`);
-    
-    // Store in session
-    userSession = {
-      apiKey: args.apiKey,
-      locationId: args.locationId,
-      authenticated: true,
-      ghlApi: ghlApi
-    };
-    
-    console.log('✅ Authentication successful!');
-    
-    return {
-      success: true,
-      authenticated: true,
-      message: `✅ Connected to REI Unlock successfully!`,
-      location: {
-        id: args.locationId,
-        name: response.data.name || 'Connected Location'
-      }
-    };
-    
-  } catch (error) {
-    console.error('❌ Authentication failed:', error.response?.data || error.message);
-    
-    // Clear session on failure
-    userSession = {
-      apiKey: null,
-      locationId: null,
-      authenticated: false,
-      ghlApi: null
-    };
-    
-    return {
-      success: false,
-      authenticated: false,
-      error: 'Authentication failed: ' + (error.response?.data?.message || error.message),
-      details: error.response?.data
-    };
-  }
-}
-
-// Check if authenticated
-function requireAuth() {
-  if (!userSession.authenticated || !userSession.ghlApi) {
-    throw new Error('Not authenticated. Please call authenticate first with your API key and Location ID.');
-  }
-  return userSession.ghlApi;
-}
-
-// Search contacts function
-async function searchContacts(args) {
-  try {
-    const ghlApi = requireAuth(); // This will throw if not authenticated
-    
-    const params = {
-      locationId: userSession.locationId
-    };
-    
-    // Build search query
-    if (args.phone) params.query = args.phone;
-    else if (args.email) params.query = args.email;
-    else if (args.query) params.query = args.query;
-    
-    console.log('🔍 Searching contacts with params:', params);
-    const response = await ghlApi.get('/contacts/', { params });
-    
-    const contacts = response.data.contacts || [];
-    
-    if (contacts.length > 0) {
-      const contact = contacts[0];
-      const fullName = contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
-      
-      return {
-        success: true,
-        found: true,
-        contact: {
-          id: contact.id,
-          name: fullName,
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-          phone: contact.phone,
-          email: contact.email
-        },
-        message: `📞 Found: ${fullName}`,
-        totalResults: contacts.length
-      };
-    } else {
-      return {
-        success: true,
-        found: false,
-        message: `❌ No contacts found for: ${params.query}`,
-        searchQuery: params.query
-      };
-    }
-    
-  } catch (error) {
-    console.error('❌ Search error:', error.message);
-    return {
-      success: false,
-      error: error.message,
-      details: error.response?.data
-    };
-  }
-}
-
-// Create contact function
-async function createContact(args) {
-  try {
-    const ghlApi = requireAuth();
-    
-    const contactData = {
-      locationId: userSession.locationId,
-      firstName: args.firstName,
-      lastName: args.lastName,
-      email: args.email,
-      phone: args.phone
-    };
-    
-    console.log('👤 Creating contact:', contactData);
-    const response = await ghlApi.post('/contacts/', contactData);
-    
-    return {
-      success: true,
-      contact: response.data.contact,
-      message: `✅ Created: ${args.firstName} ${args.lastName || ''}`
-    };
-    
-  } catch (error) {
-    console.error('❌ Create contact error:', error.message);
-    return {
-      success: false,
-      error: error.message,
-      details: error.response?.data
-    };
-  }
-}
-
-// Send SMS function
-async function sendSMS(args) {
-  try {
-    const ghlApi = requireAuth();
-    
-    let contactId = args.contactId;
-    
-    // If no contact ID provided, search by phone
-    if (!contactId && args.phone) {
-      console.log('📱 Looking up contact by phone:', args.phone);
-      const searchResult = await searchContacts({ phone: args.phone });
-      
-      if (searchResult.success && searchResult.found) {
-        contactId = searchResult.contact.id;
-        console.log('✅ Found contact ID:', contactId);
-      } else {
-        return {
-          success: false,
-          error: `Contact not found with phone: ${args.phone}`
-        };
-      }
-    }
-    
-    if (!contactId) {
-      return {
-        success: false,
-        error: 'No contact ID provided and no phone number to search with'
-      };
-    }
-    
-    const messageData = {
-      type: 'SMS',
-      contactId: contactId,
-      message: args.message
-    };
-    
-    console.log('📨 Sending SMS:', messageData);
-    const response = await ghlApi.post('/conversations/messages', messageData);
-    
-    return {
-      success: true,
-      messageId: response.data.messageId,
-      message: `📱 SMS sent to contact ${contactId}!`
-    };
-    
-  } catch (error) {
-    console.error('❌ SMS error:', error.message);
-    return {
-      success: false,
-      error: error.message,
-      details: error.response?.data
-    };
-  }
-}
-
-// Helper function to parse request body
-async function parseBody(req) {
-  return new Promise((resolve) => {
-    if (req.body) {
-      resolve(req.body);
-      return;
-    }
-    
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk.toString();
-    });
-    
-    req.on('end', () => {
-      try {
-        const parsed = body ? JSON.parse(body) : {};
-        resolve(parsed);
-      } catch (e) {
-        console.error('Body parse error:', e.message);
-        resolve({});
-      }
-    });
-  });
-}
-
-// Main handler
 module.exports = async (req, res) => {
-  const startTime = Date.now();
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-  
-  const { method, url } = req;
-  
   try {
-    // Parse body for POST requests
-    if (method === 'POST') {
-      req.body = await parseBody(req);
-      console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
-    }
-    
-    // Health check
-    if (method === 'GET' && url === '/health') {
-      res.json({
-        status: 'healthy',
-        server: 'rei-unlock-mcp',
-        version: '2.0.0',
-        timestamp: new Date().toISOString(),
-        session: {
-          authenticated: userSession.authenticated,
-          hasApiKey: !!userSession.apiKey,
-          hasLocationId: !!userSession.locationId
-        },
-        tools: TOOLS.length
-      });
-      return;
-    }
-    
-    // Tools list
-    if (method === 'GET' && url === '/tools') {
-      res.json({
-        tools: TOOLS,
-        count: TOOLS.length,
-        authenticated: userSession.authenticated
-      });
-      return;
-    }
-    
-    // SSE endpoint for ChatGPT
-    if (url === '/sse' && method === 'GET') {
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*'
-      });
-      
-      res.write(`data: {"type":"connection","status":"connected","authenticated":${userSession.authenticated}}\n\n`);
-      
-      // Keep alive
-      const keepAlive = setInterval(() => {
-        res.write('data: {"type":"ping"}\n\n');
-      }, 30000);
-      
-      // Auto-close
-      setTimeout(() => {
-        clearInterval(keepAlive);
-        res.end();
-      }, 55000);
-      
-      req.on('close', () => clearInterval(keepAlive));
-      return;
-    }
-    
-    // Handle MCP tool calls
-    if (url === '/sse' && method === 'POST') {
-      const { jsonrpc, method: rpcMethod, params, id } = req.body;
-      
-      console.log('🔧 MCP Call:', rpcMethod, params?.name);
-      
-      // Handle MCP protocol methods
-      if (rpcMethod === 'initialize') {
-        const response = {
-          jsonrpc: '2.0',
-          id: id,
-          result: {
-            protocolVersion: '2024-11-05',
-            capabilities: { tools: {} },
-            serverInfo: { name: 'rei-unlock-mcp', version: '2.0.0' }
-          }
-        };
-        res.json(response);
-        return;
-      }
-      
-      if (rpcMethod === 'tools/list') {
-        const response = {
-          jsonrpc: '2.0',
-          id: id,
-          result: { tools: TOOLS }
-        };
-        res.json(response);
-        return;
-      }
-      
-      if (rpcMethod === 'tools/call') {
-        const { name, arguments: args } = params;
-        console.log(`🛠️ Executing: ${name}`, args);
-        
-        // Detect if this is Custom Actions or MCP
-        const userAgent = req.headers['user-agent'] || '';
-        const referer = req.headers['referer'] || '';
-        const isCustomActions = userAgent.includes('GPTBot') || 
-                               userAgent.includes('ChatGPT') || 
-                               referer.includes('openai.com') ||
-                               referer.includes('chatgpt.com');
-        
-        console.log(`🔍 Client detection: ${isCustomActions ? 'ChatGPT Custom Actions' : 'MCP'}`);
-        console.log(`📱 User-Agent: ${userAgent}`);
-        console.log(`🔗 Referer: ${referer}`);
-        
-        let result;
-        
-        try {
-          switch (name) {
-            case 'authenticate':
-              result = await authenticate(args);
-              break;
-            case 'search_contacts':
-              result = await searchContacts(args);
-              break;
-            case 'create_contact':
-              result = await createContact(args);
-              break;
-            case 'send_sms':
-              result = await sendSMS(args);
-              break;
-            default:
-              result = { success: false, error: `Unknown tool: ${name}` };
-          }
-        } catch (error) {
-          result = { success: false, error: error.message };
-        }
-        
-        console.log(`✅ Result:`, result);
-        
-        if (isCustomActions) {
-          // ChatGPT Custom Actions expects direct JSON response
-          console.log('📤 Sending Custom Actions response (direct JSON)');
-          res.json(result);
-        } else {
-          // MCP expects wrapped response
-          console.log('📤 Sending MCP response (wrapped JSON)');
-          const response = {
-            jsonrpc: '2.0',
-            id: id,
-            result: {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(result, null, 2)
-                }
-              ]
-            }
-          };
-          res.json(response);
-        }
-        return;
-      }
-      
-      // Default MCP response
-      const response = {
-        jsonrpc: '2.0',
-        id: id,
-        result: { status: 'ok' }
-      };
-      res.json(response);
-      return;
-    }
-    
-    // Default response
-    res.json({
-      message: 'REI Unlock MCP Server',
-      status: 'running',
-      authenticated: userSession.authenticated,
-      endpoints: {
-        health: '/health',
-        tools: '/tools',
-        sse: '/sse'
+    const response = await axios.get('https://services.leadconnectorhq.com/contacts/search', {
+      headers: {
+        'Authorization': 'Bearer pit-aaca741e-47a2-4b1e-b793-820d2621667b',
+        'Version': '2021-07-28',
+        'Content-Type': 'application/json'
       },
-      availableTools: TOOLS.map(t => t.name),
-      processing_time: `${Date.now() - startTime}ms`
+      params: {
+        locationId: '9hxHySEz2LSjRxkhuGQs',
+        query: '4107172457'
+      }
     });
     
+    res.json({
+      success: true,
+      data: response.data,
+      message: 'Real API call successful'
+    });
   } catch (error) {
-    console.error('❌ Server error:', error);
     res.status(500).json({
+      success: false,
       error: error.message,
-      timestamp: new Date().toISOString()
+      response: error.response?.data
     });
   }
 };
+
+// Then test with: curl https://rei-unlock-mcp.vercel.app/api/test
+
+// STEP 7: Debug current deployment
+// Check what's actually deployed:
+console.log("Current deployment issues:");
+console.log("1. Wrong server code is deployed");
+console.log("2. Mock responses instead of real API calls");
+console.log("3. Different tool structure than expected");
+console.log("");
+console.log("To fix:");
+console.log("1. Verify your build process compiles the right files");
+console.log("2. Check that dist/http-server.js is the correct file");
+console.log("3. Ensure Vercel is pointing to the right entry point");
+console.log("4. Test environment variables are accessible");
+console.log("");
+console.log("Expected tools in your real server:");
+console.log("- create_contact, search_contacts, get_contact, update_contact");
+console.log("- send_sms, send_email, search_conversations");
+console.log("- create_blog_post, get_blog_posts");
+console.log("- Plus 250+ other tools");
+console.log("");
+console.log("Current deployed server has:");
+console.log("- search, send_message, search_contacts (different structure)");
+console.log("- Mock responses with John Doe, Jane Smith");
+console.log("- No real API integration");
