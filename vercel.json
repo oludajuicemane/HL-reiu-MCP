@@ -1,12 +1,24 @@
+// Rewritten `vercel.json`
 {
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/api/mcp-session",
-      "destination": "/api/mcp-session.js"
+      "src": "api/index.js",
+      "use": "@vercel/node"
     },
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index.js"
+      "src": "api/mcp-session.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/mcp-session",
+      "dest": "/api/mcp-session.js"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.js"
     }
   ]
 }
