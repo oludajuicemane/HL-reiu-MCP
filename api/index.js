@@ -1,7 +1,5 @@
 // api/index.js
 
-const { handleAuthenticate } = require("./mcp-session");
-
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 
 const SERVER_INFO = {
@@ -47,7 +45,7 @@ const TOOLS = [
 
 function log(message, data = null) {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] [MCP] ${message}${data ? ': ' + JSON.stringify(data) : ''}`);
+  console.log([${timestamp}] [MCP] ${message}${data ? ': ' + JSON.stringify(data) : ''});
 }
 
 function createJsonRpcResponse(id, result = null, error = null) {
@@ -83,17 +81,17 @@ function handleToolsCall(request) {
   if (name === "search") {
     content = [{
       type: "text",
-      text: `Results for: "${args.query}"`
+      text: Results for: "${args.query}"
     }];
   } else if (name === "retrieve") {
     content = [{
       type: "text",
-      text: `Retrieved ${args.type} with ID ${args.id}`
+      text: Retrieved ${args.type} with ID ${args.id}
     }];
   } else {
     return createJsonRpcResponse(request.id, null, {
       code: -32601,
-      message: `Method not found: ${name}`
+      message: Method not found: ${name}
     });
   }
 
@@ -119,11 +117,10 @@ function processJsonRpcMessage(message) {
       case "tools/list": return handleToolsList(message);
       case "tools/call": return handleToolsCall(message);
       case "ping": return handlePing(message);
-      case "authenticate": return handleAuthenticate(message);
       default:
         return createJsonRpcResponse(message.id, null, {
           code: -32601,
-          message: `Method not found: ${message.method}`
+          message: Method not found: ${message.method}
         });
     }
   } catch (err) {
@@ -138,7 +135,7 @@ function processJsonRpcMessage(message) {
 
 function sendSSE(res, data) {
   const msg = typeof data === "string" ? data : JSON.stringify(data);
-  res.write(`data: ${msg}\n\n`);
+  res.write(data: ${msg}\n\n);
 }
 
 function setCORSHeaders(res) {
