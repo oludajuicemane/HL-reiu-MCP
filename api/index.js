@@ -1,8 +1,8 @@
 // api/index.js
 
-const MCP_PROTOCOL_VERSION = "2024-11-05";
-
 const { handleAuthenticate } = require("./mcp-session");
+
+const MCP_PROTOCOL_VERSION = "2024-11-05";
 
 const SERVER_INFO = {
   name: "ghl-mcp-server",
