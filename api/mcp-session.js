@@ -31,7 +31,7 @@ function createGHLClient(apiKey, locationId) {
   return axios.create({
     baseURL: process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': Bearer ${apiKey},
       'Content-Type': 'application/json',
       'Version': '2021-07-28'
     }
@@ -42,10 +42,10 @@ function createGHLClient(apiKey, locationId) {
 async function testConnection(apiKey, locationId) {
   try {
     const client = createGHLClient(apiKey, locationId);
-    await client.get(`/locations/${locationId}`);
+    await client.get(/locations/${locationId});
     return true;
   } catch (error) {
-    throw new Error(`Invalid credentials: ${error.message}`);
+    throw new Error(Invalid credentials: ${error.message});
   }
 }
 
@@ -111,7 +111,7 @@ async function searchContacts(session, args) {
       total: response.data.total || 0
     };
   } catch (error) {
-    throw new Error(`Failed to search contacts: ${error.message}`);
+    throw new Error(Failed to search contacts: ${error.message});
   }
 }
 
@@ -139,7 +139,7 @@ async function sendMessage(session, args) {
       conversationId: response.data.conversationId
     };
   } catch (error) {
-    throw new Error(`Failed to send message: ${error.message}`);
+    throw new Error(Failed to send message: ${error.message});
   }
 }
 
@@ -162,7 +162,7 @@ async function createBlogPost(session, args) {
       url: response.data.url
     };
   } catch (error) {
-    throw new Error(`Failed to create blog post: ${error.message}`);
+    throw new Error(Failed to create blog post: ${error.message});
   }
 }
 
@@ -186,7 +186,7 @@ async function getOpportunities(session, args) {
       total: response.data.total || 0
     };
   } catch (error) {
-    throw new Error(`Failed to get opportunities: ${error.message}`);
+    throw new Error(Failed to get opportunities: ${error.message});
   }
 }
 
@@ -383,7 +383,7 @@ module.exports = async (req, res) => {
         if (!tools[name]) {
           return res.status(404).json({
             jsonrpc: '2.0',
-            error: { code: -32601, message: `Tool '${name}' not found` },
+            error: { code: -32601, message: Tool '${name}' not found },
             id
           });
         }
@@ -454,3 +454,5 @@ module.exports = async (req, res) => {
     });
   }
 };
+
+
