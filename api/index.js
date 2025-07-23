@@ -2,6 +2,8 @@
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 
+const { handleAuthenticate } = require("./mcp-session");
+
 const SERVER_INFO = {
   name: "ghl-mcp-server",
   version: "1.0.0"
@@ -117,6 +119,7 @@ function processJsonRpcMessage(message) {
       case "tools/list": return handleToolsList(message);
       case "tools/call": return handleToolsCall(message);
       case "ping": return handlePing(message);
+      case "authenticate": return handleAuthenticate(message);
       default:
         return createJsonRpcResponse(message.id, null, {
           code: -32601,
